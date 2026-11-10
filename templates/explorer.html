@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block page_title %}File Explorer & Integrity Management{% endblock %}
+
+{% block topbar_actions %}
+<button class="btn btn-primary btn-sm" onclick="verifyAllInFolder()">
+  <span>🛡️</span> Verify Folder Integrity
+</button>
+{% endblock %}
+
+{% block content %}
+<div class="cyber-card" style="margin-bottom: 20px;">
+  <div style="display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end;">
+    <div style="flex: 1; min-width: 200px;">
+      <label class="form-label">Filter by Monitored Directory:</label>
+      <select id="explorer-folder-filter" class="form-control" onchange="loadFiles()">
+        <option value="">-- All Monitored Folders --</option>
+        {% for folder in folders %}
+        <option value="{{ folder.id }}">{{ folder.label }} ({{ folder.path }})</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div style="width: 180px;">
+      <label class="form-label">Integrity Status:</label>
+      <select id="explorer-status-filter" class="form-control" onchange="loadFiles()">
+        <option value="">All Statuses</option>
+        <option value="ACTIVE">ACTIVE</option>
+        <option value="MODIFIED">MODIFIED</option>
+        <option value="DELETED">DELETED</option>
+        <option value="MISSING">MISSING</option>
+      </select>
+    </div>
+
+    <div style="flex: 1; min-width: 220px;">
+      <label class="form-label">Search Filename or Path:</label>
+      <input type="text" id="explorer-search-input" class="form-control" placeholder="Type filename..." oninput="loadFiles()">
+    </div>
+  </div>
+</div>
+
+<div class="cyber-card">
+  <div class="card-header">
+    <div class="card-title">📄 Monitored File Inode Table</div>
+    <span class="badge badge-info" id="file-count-badge">Synchronized</span>
+  </div>
+
+  <div class="table-responsive">
+    <table class="cyber-table">
+      <thead>
+        <tr>
+          <th>Filename</th>
+          <th>Folder</th>
+          <th>Relative Path</th>
+          <th>Size</th>
+          <th>Cryptographic SHA-256</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="explorer-file-tbody">
+        <tr>
+          <td colspan="7" style="text-align:center; padding: 28px; color: var(--text-muted);">
+            Loading monitored files...
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Modal: File Versions -->
+<div class="modal-overlay" id="file-versions-modal">
+  <div class="modal-content" style="max-width: 780px;">
+    <div class="modal-header">
+      <h3 class="modal-title" id="versions-modal-title">🕒 File Versions</h3>
+      <button class="modal-close" onclick="closeModal('file-versions-modal')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:12px; color:var(--text-muted); margin-bottom:14px;">
+        Every modification captured by the SafeFS kernel observer creates an immutable snapshot backup.
+        Restoring any previous snapshot automatically preserves the current file state.
+      </p>
+      <div class="table-responsive">
+        <table class="cyber-table">
+          <thead>
+            <tr>
+              <th>Version</th>
+              <th>Type</th>
+              <th>Size</th>
+              <th>SHA-256</th>
+              <th>Created At</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="versions-modal-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-outline" onclick="closeModal('file-versions-modal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: File Content Preview -->
+<div class="modal-overlay" id="file-preview-modal">
+  <div class="modal-content" style="max-width: 750px;">
+    <div class="modal-header">
+      <h3 class="modal-title" id="preview-modal-title">👁️ File Content Preview</h3>
+      <button class="modal-close" onclick="closeModal('file-preview-modal')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <pre id="preview-modal-content" class="diff-container" style="max-height: 450px;"></pre>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-outline" onclick="closeModal('file-preview-modal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Unified Diff Viewer -->
+<div class="modal-overlay" id="diff-viewer-modal">
+  <div class="modal-content" style="max-width: 850px;">
+    <div class="modal-header">
+      <h3 class="modal-title" id="diff-modal-title">🔍 Unified Differential Analysis</h3>
+      <button class="modal-close" onclick="closeModal('diff-viewer-modal')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="diff-modal-content" class="diff-container"></div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-outline" onclick="closeModal('diff-viewer-modal')">Close</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/explorer.js') }}"></script>
+{% endblock %}

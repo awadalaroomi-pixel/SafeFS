@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+
+{% block page_title %}Operating System & Hardware Telemetry{% endblock %}
+
+{% block content %}
+<!-- Host Metrics Cards -->
+<div class="grid-stats">
+  <div class="cyber-card stat-card accent-cyan">
+    <div class="stat-card-header">
+      <span>CPU Utilization</span>
+      <div class="stat-card-icon">⚡</div>
+    </div>
+    <div class="stat-card-value" id="sys-cpu-percent">0%</div>
+    <div class="stat-card-sub" id="sys-cpu-cores">Loading cores...</div>
+  </div>
+
+  <div class="cyber-card stat-card accent-blue">
+    <div class="stat-card-header">
+      <span>RAM Usage</span>
+      <div class="stat-card-icon">🧠</div>
+    </div>
+    <div class="stat-card-value" id="sys-mem-percent">0%</div>
+    <div class="stat-card-sub" id="sys-mem-details">0 / 0</div>
+  </div>
+
+  <div class="cyber-card stat-card accent-emerald">
+    <div class="stat-card-header">
+      <span>Host Storage Usage</span>
+      <div class="stat-card-icon">💾</div>
+    </div>
+    <div class="stat-card-value" id="sys-disk-percent">0%</div>
+    <div class="stat-card-sub" id="sys-disk-details">0 / 0</div>
+  </div>
+
+  <div class="cyber-card stat-card accent-purple">
+    <div class="stat-card-header">
+      <span>SafeFS Process RSS</span>
+      <div class="stat-card-icon">⚙️</div>
+    </div>
+    <div class="stat-card-value" id="sys-proc-mem">0 MB</div>
+    <div class="stat-card-sub" id="sys-proc-threads">Threads: 0</div>
+  </div>
+</div>
+
+<div class="grid-cols-2">
+  <!-- Core Utilization Graph -->
+  <div class="cyber-card">
+    <div class="card-header">
+      <div class="card-title">🖥️ Multi-Core Processor Load</div>
+      <span class="badge badge-info" id="sys-cpu-freq">Freq: N/A</span>
+    </div>
+    <div style="height: 220px; position: relative;">
+      <canvas id="cpuCoreChart"></canvas>
+    </div>
+  </div>
+
+  <!-- SafeFS Process Runtime Details -->
+  <div class="cyber-card">
+    <div class="card-header">
+      <div class="card-title">🔍 Process Control Block (PCB) Telemetry</div>
+      <span class="badge badge-success">Daemon Healthy</span>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:12px; font-size:13px;">
+      <div style="display:flex; justify-content:space-between; border-bottom:1px solid var(--border-subtle); padding-bottom:6px;">
+        <span style="color:var(--text-muted);">Process Identifier (PID):</span>
+        <span class="font-mono" id="proc-pid">-</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; border-bottom:1px solid var(--border-subtle); padding-bottom:6px;">
+        <span style="color:var(--text-muted);">Virtual Memory Size (VMS):</span>
+        <span class="font-mono" id="proc-vms">-</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; border-bottom:1px solid var(--border-subtle); padding-bottom:6px;">
+        <span style="color:var(--text-muted);">Active POSIX/Win32 Threads:</span>
+        <span class="font-mono" id="proc-thread-count">-</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; border-bottom:1px solid var(--border-subtle); padding-bottom:6px;">
+        <span style="color:var(--text-muted);">Process Launch Time:</span>
+        <span id="proc-started">-</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; border-bottom:1px solid var(--border-subtle); padding-bottom:6px;">
+        <span style="color:var(--text-muted);">Watchdog Kernel Engine:</span>
+        <span id="proc-engine" style="color:var(--accent-cyan); font-weight:600;">-</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- OS Kernel Architecture Details -->
+<div class="cyber-card">
+  <div class="card-header">
+    <div class="card-title">💻 Operating System & Kernel Environment</div>
+  </div>
+  <div class="grid-cols-3" style="margin-bottom:0;">
+    <div style="background:var(--bg-tertiary); padding:16px; border-radius:8px; border:1px solid var(--border-subtle);">
+      <div style="font-size:11px; text-transform:uppercase; color:var(--text-muted);">Host Platform</div>
+      <div style="font-size:16px; font-weight:700; margin-top:4px;" id="os-platform">-</div>
+      <div style="font-size:12px; color:var(--text-secondary); margin-top:2px;" id="os-release">-</div>
+    </div>
+
+    <div style="background:var(--bg-tertiary); padding:16px; border-radius:8px; border:1px solid var(--border-subtle);">
+      <div style="font-size:11px; text-transform:uppercase; color:var(--text-muted);">Hardware Architecture</div>
+      <div style="font-size:16px; font-weight:700; margin-top:4px;" id="os-arch">-</div>
+      <div style="font-size:12px; color:var(--text-secondary); margin-top:2px;" id="os-python">-</div>
+    </div>
+
+    <div style="background:var(--bg-tertiary); padding:16px; border-radius:8px; border:1px solid var(--border-subtle);">
+      <div style="font-size:11px; text-transform:uppercase; color:var(--text-muted);">Host System Uptime</div>
+      <div style="font-size:16px; font-weight:700; margin-top:4px;" id="os-uptime">-</div>
+      <div style="font-size:12px; color:var(--text-secondary); margin-top:2px;" id="os-boot">-</div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let cpuChart = null;
+
+async function fetchSystemStats() {
+  try {
+    const res = await fetch('/api/system/stats');
+    if (!res.ok) return;
+    const data = await res.json();
+
+    // CPU
+    document.getElementById('sys-cpu-percent').textContent = `${data.cpu.percent}%`;
+    document.getElementById('sys-cpu-cores').textContent = `${data.cpu.physical_cores} Physical / ${data.cpu.logical_cores} Logical`;
+    document.getElementById('sys-cpu-freq').textContent = `Freq: ${data.cpu.frequency}`;
+
+    // Memory
+    document.getElementById('sys-mem-percent').textContent = `${data.memory.percent}%`;
+    document.getElementById('sys-mem-details').textContent = `${data.memory.used} / ${data.memory.total}`;
+
+    // Storage
+    document.getElementById('sys-disk-percent').textContent = `${data.storage.percent}%`;
+    document.getElementById('sys-disk-details').textContent = `${data.storage.used} / ${data.storage.total}`;
+
+    // SafeFS Process
+    document.getElementById('sys-proc-mem').textContent = data.process.rss_memory;
+    document.getElementById('sys-proc-threads').textContent = `Threads: ${data.process.threads}`;
+    document.getElementById('proc-pid').textContent = data.process.pid;
+    document.getElementById('proc-vms').textContent = data.process.vms_memory;
+    document.getElementById('proc-thread-count').textContent = data.process.threads;
+    document.getElementById('proc-started').textContent = data.process.started_at;
+    document.getElementById('proc-engine').textContent = data.monitor_status ? data.monitor_status.engine : 'Active';
+
+    // OS Info
+    document.getElementById('os-platform').textContent = `${data.os.os_name} (${data.os.architecture})`;
+    document.getElementById('os-release').textContent = `Kernel ${data.os.os_release} - ${data.os.os_version.substring(0, 20)}`;
+    document.getElementById('os-arch').textContent = data.os.architecture;
+    document.getElementById('os-python').textContent = `Python ${data.os.python_version}`;
+    document.getElementById('os-uptime').textContent = data.os.uptime;
+    document.getElementById('os-boot').textContent = `Booted: ${data.os.boot_time}`;
+
+    // Update Per-Core Chart
+    updateCpuChart(data.cpu.per_core || []);
+
+  } catch (err) {
+    console.error('Error fetching system stats:', err);
+  }
+}
+
+function initCpuChart() {
+  const ctx = document.getElementById('cpuCoreChart');
+  if (!ctx) return;
+  cpuChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: [],
+      datasets: [{
+        label: 'Utilization %',
+        data: [],
+        backgroundColor: '#00d2ff',
+        borderRadius: 4
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { ticks: { color: '#64748b' }, grid: { display: false } },
+        y: { min: 0, max: 100, ticks: { color: '#64748b' }, grid: { color: '#232d45' } }
+      },
+      plugins: {
+        legend: { display: false }
+      }
+    }
+  });
+}
+
+function updateCpuChart(perCore) {
+  if (!cpuChart) return;
+  cpuChart.data.labels = perCore.map((_, i) => `Core ${i}`);
+  cpuChart.data.datasets[0].data = perCore;
+  cpuChart.update();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  initCpuChart();
+  fetchSystemStats();
+  setInterval(fetchSystemStats, 3000);
+});
+</script>
+{% endblock %}

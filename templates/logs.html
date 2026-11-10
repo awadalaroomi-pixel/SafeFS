@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+
+{% block page_title %}System Activity & Audit Logs{% endblock %}
+
+{% block topbar_actions %}
+<button class="btn btn-danger btn-sm" onclick="clearAllLogs()">
+  <span>🗑️</span> Clear Logs
+</button>
+{% endblock %}
+
+{% block content %}
+<!-- Filtering Bar -->
+<div class="cyber-card" style="margin-bottom: 20px;">
+  <div style="display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end;">
+    <div style="width: 170px;">
+      <label class="form-label">Event Type:</label>
+      <select id="log-event-filter" class="form-control" onchange="loadActivityLogs(0)">
+        <option value="ALL">All Events</option>
+        <option value="CREATED">CREATED</option>
+        <option value="MODIFIED">MODIFIED</option>
+        <option value="DELETED">DELETED</option>
+        <option value="MOVED">MOVED</option>
+        <option value="RESTORED">RESTORED</option>
+        <option value="INTEGRITY_CHECK">INTEGRITY_CHECK</option>
+        <option value="THREAT_DETECTED">THREAT_DETECTED</option>
+      </select>
+    </div>
+
+    <div style="width: 150px;">
+      <label class="form-label">Severity Level:</label>
+      <select id="log-severity-filter" class="form-control" onchange="loadActivityLogs(0)">
+        <option value="ALL">All Severities</option>
+        <option value="INFO">INFO</option>
+        <option value="LOW">LOW</option>
+        <option value="MEDIUM">MEDIUM</option>
+        <option value="HIGH">HIGH</option>
+        <option value="CRITICAL">CRITICAL</option>
+      </select>
+    </div>
+
+    <div style="flex: 1; min-width: 220px;">
+      <label class="form-label">Search Filename, Path, or Message:</label>
+      <input type="text" id="log-search-input" class="form-control" placeholder="Search keywords..." oninput="loadActivityLogs(0)">
+    </div>
+  </div>
+</div>
+
+<!-- Logs Table -->
+<div class="cyber-card">
+  <div class="card-header">
+    <div class="card-title">📜 Audit Trail Records</div>
+    <span class="badge badge-info" id="logs-total-badge">0 Logs</span>
+  </div>
+
+  <div class="table-responsive">
+    <table class="cyber-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Severity</th>
+          <th>Event</th>
+          <th>Filename</th>
+          <th>File Path</th>
+          <th>Previous Hash</th>
+          <th>New Hash</th>
+          <th>Timestamp</th>
+        </tr>
+      </thead>
+      <tbody id="activity-logs-tbody">
+        <tr>
+          <td colspan="8" style="text-align:center; padding:32px; color:var(--text-muted);">
+            Loading activity logs...
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination Controls -->
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-top:16px; padding-top:12px; border-top:1px solid var(--border-subtle);">
+    <div style="font-size:12px; color:var(--text-muted);" id="pagination-info">Showing 0 of 0</div>
+    <div style="display:flex; gap:8px;">
+      <button id="prev-page-btn" class="btn btn-outline btn-sm" onclick="changePage(-1)">◀ Previous</button>
+      <button id="next-page-btn" class="btn btn-outline btn-sm" onclick="changePage(1)">Next ▶</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let currentOffset = 0;
+const pageLimit = 50;
+let totalLogsCount = 0;
+
+async function loadActivityLogs(offset = 0) {
+  currentOffset = offset;
+  const eventType = document.getElementById('log-event-filter').value;
+  const severity = document.getElementById('log-severity-filter').value;
+  const search = document.getElementById('log-search-input').value.trim();
+
+  let url = `/api/logs?limit=${pageLimit}&offset=${offset}&`;
+  if (eventType !== 'ALL') url += `event_type=${encodeURIComponent(eventType)}&`;
+  if (severity !== 'ALL') url += `severity=${encodeURIComponent(severity)}&`;
+  if (search) url += `search=${encodeURIComponent(search)}&`;
+
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    totalLogsCount = data.total;
+    renderLogs(data.logs);
+    updatePagination(offset, data.logs.length, data.total);
+  } catch (err) {
+    console.error('Error fetching logs:', err);
+  }
+}
+
+function renderLogs(logs) {
+  const tbody = document.getElementById('activity-logs-tbody');
+  document.getElementById('logs-total-badge').textContent = `${totalLogsCount} Records`;
+
+  if (!tbody) return;
+
+  if (logs.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:32px; color:var(--text-muted);">No logs match the current filters.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = logs.map(l => {
+    let sevBadge = 'badge-secondary';
+    if (l.severity === 'CRITICAL') sevBadge = 'badge-danger';
+    else if (l.severity === 'HIGH') sevBadge = 'badge-danger';
+    else if (l.severity === 'MEDIUM') sevBadge = 'badge-warning';
+    else if (l.severity === 'LOW') sevBadge = 'badge-info';
+
+    let eventBadge = 'badge-secondary';
+    if (l.event_type === 'CREATED') eventBadge = 'badge-success';
+    else if (l.event_type === 'MODIFIED') eventBadge = 'badge-info';
+    else if (l.event_type === 'DELETED') eventBadge = 'badge-danger';
+    else if (l.event_type === 'MOVED') eventBadge = 'badge-warning';
+    else if (l.event_type === 'RESTORED') eventBadge = 'badge-success';
+    else if (l.event_type === 'THREAT_DETECTED') eventBadge = 'badge-danger';
+
+    const prevHash = l.previous_hash ? `<span class="font-mono">${l.previous_hash.substring(0, 8)}...</span>` : '-';
+    const newHash = l.new_hash ? `<span class="font-mono">${l.new_hash.substring(0, 8)}...</span>` : '-';
+
+    return `
+      <tr>
+        <td style="color:var(--text-muted); font-size:12px;">#${l.id}</td>
+        <td><span class="badge ${sevBadge}">${l.severity}</span></td>
+        <td><span class="badge ${eventBadge}">${l.event_type}</span></td>
+        <td style="font-weight:600; color:var(--text-primary);">${escapeHtml(l.filename)}</td>
+        <td style="font-size:12px; color:var(--text-muted);">${escapeHtml(truncateString(l.file_path, 35))}</td>
+        <td>${prevHash}</td>
+        <td>${newHash}</td>
+        <td style="font-size:12px; color:var(--text-secondary);">${l.timestamp}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function updatePagination(offset, currentBatchSize, total) {
+  const start = total === 0 ? 0 : offset + 1;
+  const end = offset + currentBatchSize;
+  document.getElementById('pagination-info').textContent = `Showing ${start} - ${end} of ${total} records`;
+
+  document.getElementById('prev-page-btn').disabled = offset <= 0;
+  document.getElementById('next-page-btn').disabled = end >= total;
+}
+
+function changePage(direction) {
+  const newOffset = currentOffset + (direction * pageLimit);
+  if (newOffset >= 0 && newOffset < totalLogsCount) {
+    loadActivityLogs(newOffset);
+  }
+}
+
+async function clearAllLogs() {
+  if (!confirm('Are you sure you want to purge all activity audit logs from the database?')) return;
+  try {
+    const res = await fetch('/api/logs/clear', { method: 'POST' });
+    const data = await res.json();
+    if (data.success) {
+      showToast('Activity logs cleared', 'info');
+      loadActivityLogs(0);
+    }
+  } catch (err) {
+    showToast('Failed to clear logs', 'error');
+  }
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadActivityLogs(0);
+});
+</script>
+{% endblock %}

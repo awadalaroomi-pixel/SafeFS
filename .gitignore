@@ -1,0 +1,31 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+*.zip
+
+# Unit test / coverage
+.coverage
+.pytest_cache/
+
+# SafeFS runtime database and transient backups
+data/safefs.db-shm
+data/safefs.db-wal
+# Note: sample files in demo_workspace are tracked for demonstration
+
+# Environment variables & virtualenvs
+.env
+.venv/
+venv/
+ENV/
+
+# IDE & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

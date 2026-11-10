@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+
+{% block page_title %}Operating Systems Academic Architecture & Concepts{% endblock %}
+
+{% block content %}
+<div class="cyber-card" style="margin-bottom: 24px; border-left: 4px solid var(--accent-cyan);">
+  <div style="font-size:16px; font-weight:700; color:var(--text-primary); margin-bottom:6px;">
+    SafeFS: Bridging Operating Systems Theory & Practical Systems Engineering
+  </div>
+  <p style="font-size:13px; color:var(--text-secondary); line-height:1.7;">
+    SafeFS is designed as a foundational Operating Systems course capstone project.
+    It demonstrates core OS design principles: Virtual File Systems (VFS), Inode data structures,
+    event-driven asynchronous I/O notifications, journaling & transactional rollbacks, thread concurrency & locking,
+    cryptographic integrity, and process control telemetry.
+  </p>
+</div>
+
+<div class="grid-cols-2">
+  <!-- 1. VFS and Inode Data Structures -->
+  <div class="cyber-card">
+    <div class="card-header">
+      <div class="card-title">1. Virtual File System & Inode Abstraction</div>
+      <span class="badge badge-info">VFS / FCB</span>
+    </div>
+    <div style="font-size:13px; color:var(--text-secondary); line-height:1.7;">
+      <p style="margin-bottom:10px;">
+        In traditional UNIX operating systems, every file is represented by an <strong>Index Node (inode)</strong>, 
+        and in Windows by a <strong>File Control Block (FCB)</strong> inside the Master File Table (MFT).
+      </p>
+      <div style="background:var(--bg-tertiary); padding:12px; border-radius:8px; border:1px solid var(--border-subtle); margin-bottom:10px;">
+        <div style="font-weight:700; color:var(--text-primary); font-size:12px; margin-bottom:4px;">SafeFS Implementation:</div>
+        SafeFS maintains an internal SQLite relational schema (`files` table) simulating the operating system's Inode Table. 
+        It isolates file identity (`file_id`, `path`, `filename`, `relative_path`) from content blocks (`size_bytes`, `sha256`, `last_modified`), 
+        mirroring how modern kernels decouple file names in directories from disk metadata.
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. Event-Driven I/O & Kernel Notifications -->
+  <div class="cyber-card">
+    <div class="card-header">
+      <div class="card-title">2. Event-Driven I/O & Kernel Notifications</div>
+      <span class="badge badge-success">Interrupts / inotify</span>
+    </div>
+    <div style="size:13px; color:var(--text-secondary); line-height:1.7;">
+      <p style="margin-bottom:10px;">
+        Polling the file system continuously consumes high CPU and causes disk thrashing. Modern kernels provide asynchronous 
+        directory change notification subsystems that deliver event interrupts to user-space applications.
+      </p>
+      <div style="background:var(--bg-tertiary); padding:12px; border-radius:8px; border:1px solid var(--border-subtle); margin-bottom:10px;">
+        <div style="font-weight:700; color:var(--text-primary); font-size:12px; margin-bottom:4px;">SafeFS Implementation:</div>
+        Using Python <code>Watchdog</code>, SafeFS hooks directly into:
+        <ul style="padding-left:18px; margin-top:4px;">
+          <li><strong>Linux:</strong> <code>inotify(7)</code> subsystem (non-blocking kernel event queues).</li>
+          <li><strong>Windows:</strong> <code>ReadDirectoryChangesW</code> with I/O Completion Ports (IOCP).</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. Copy-on-Write & Journaling Snapshots -->
+  <div class="cyber-card">
+    <div class="card-header">
+      <div class="card-title">3. Journaling, Rollback & Copy-on-Write</div>
+      <span class="badge badge-warning">Atomic Storage</span>
+    </div>
+    <div style="font-size:13px; color:var(--text-secondary); line-height:1.7;">
+      <p style="margin-bottom:10px;">
+        Advanced file systems (ZFS, Btrfs, WAFL) utilize <strong>Copy-on-Write (CoW)</strong> and transactional 
+        journaling to prevent data corruption during power loss or system failure.
+      </p>
+      <div style="background:var(--bg-tertiary); padding:12px; border-radius:8px; border:1px solid var(--border-subtle); margin-bottom:10px;">
+        <div style="font-weight:700; color:var(--text-primary); font-size:12px; margin-bottom:4px;">SafeFS Implementation:</div>
+        SafeFS enforces a strict zero-data-loss invariant. When a file is modified, an immutable point-in-time snapshot 
+        is stored in isolated storage before mutations proceed. Crucially, before any version restore occurs, a 
+        <code>PRE_RESTORE</code> snapshot of the target is guaranteed.
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. Cryptographic Integrity & Tamper Detection -->
+  <div class="cyber-card">
+    <div class="card-header">
+      <div class="card-title">4. Cryptographic Hashing & Silent Data Corruption</div>
+      <span class="badge badge-danger">SHA-256</span>
+    </div>
+    <div style="font-size:13px; color:var(--text-secondary); line-height:1.7;">
+      <p style="margin-bottom:10px;">
+        Standard OS timestamps (<code>st_mtime</code>) can easily be spoofed by malware (timestomping) or become inaccurate. 
+        Detecting unauthorized modification and silent data corruption (bit-rot) requires cryptographic block verification.
+      </p>
+      <div style="background:var(--bg-tertiary); padding:12px; border-radius:8px; border:1px solid var(--border-subtle); margin-bottom:10px;">
+        <div style="font-weight:700; color:var(--text-primary); font-size:12px; margin-bottom:4px;">SafeFS Implementation:</div>
+        SafeFS utilizes streaming SHA-256 block hashing (64 KB buffers) to verify integrity without loading entire files into memory. 
+        It compares on-disk hashes against trusted database baselines to identify unauthorized drift.
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. Concurrency, Race Conditions & Mutex Locking -->
+  <div class="cyber-card">
+    <div class="card-header">
+      <div class="card-title">5. Concurrency, Threading & Synchronization</div>
+      <span class="badge badge-purple">Mutex / WAL</span>
+    </div>
+    <div style="font-size:13px; color:var(--text-secondary); line-height:1.7;">
+      <p style="margin-bottom:10px;">
+        Handling concurrent file writes, multi-threaded watchdog event queues, and database updates introduces critical section race conditions.
+      </p>
+      <div style="background:var(--bg-tertiary); padding:12px; border-radius:8px; border:1px solid var(--border-subtle); margin-bottom:10px;">
+        <div style="font-weight:700; color:var(--text-primary); font-size:12px; margin-bottom:4px;">SafeFS Implementation:</div>
+        SafeFS protects state using Python <code>threading.RLock()</code> mutex primitives, event debouncing to avoid write-burst races, 
+        and SQLite's Write-Ahead Logging (<code>WAL</code>) mode to achieve concurrent multi-reader, single-writer ACID guarantees.
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. Process Control Block & System Telemetry -->
+  <div class="cyber-card">
+    <div class="card-header">
+      <div class="card-title">6. Process Accounting & Hardware Telemetry</div>
+      <span class="badge badge-info">PCB / psutil</span>
+    </div>
+    <div style="font-size:13px; color:var(--text-secondary); line-height:1.7;">
+      <p style="margin-bottom:10px;">
+        Operating systems maintain a <strong>Process Control Block (PCB)</strong> for every active task, tracking PID, memory allocations 
+        (RSS, VMS), CPU times, open file descriptors, and thread counts.
+      </p>
+      <div style="background:var(--bg-tertiary); padding:12px; border-radius:8px; border:1px solid var(--border-subtle); margin-bottom:10px;">
+        <div style="font-weight:700; color:var(--text-primary); font-size:12px; margin-bottom:4px;">SafeFS Implementation:</div>
+        Via <code>psutil</code>, SafeFS exposes its own internal PCB metrics alongside host telemetry (per-core CPU scheduling, virtual memory paging, 
+        storage partition statistics, and disk I/O throughput).
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Architectural Summary Flowchart -->
+<div class="cyber-card" style="margin-top: 10px;">
+  <div class="card-header">
+    <div class="card-title">📐 SafeFS Layered Architectural Model</div>
+  </div>
+  <div style="font-family:var(--font-mono); font-size:12px; color:var(--text-secondary); background:var(--bg-tertiary); padding:20px; border-radius:8px; line-height:1.8; overflow-x:auto;">
+    +-----------------------------------------------------------------------------------+<br>
+    |                       USER SPACE: PRESENTATION & REST API                         |<br>
+    |         Flask Web Server (Jinja2 / Chart.js / DevSecOps Dashboard / REST)         |<br>
+    +-----------------------------------------------------------------------------------+<br>
+                                          ▲<br>
+                                          │ Inter-Process Communication & JSON Telemetry<br>
+                                          ▼<br>
+    +-----------------------------------------------------------------------------------+<br>
+    |                       SAFEXFS APPLICATION CORE ENGINE                             |<br>
+    |   [ThreatDetector] ── [IntegrityChecker] ── [VersionManager] ── [SafeFSDatabase]  |<br>
+    |        (HIDS)              (SHA-256)           (Snapshots)          (SQLite WAL)  |<br>
+    +-----------------------------------------------------------------------------------+<br>
+                                          ▲<br>
+                                          │ Watchdog FileSystemEventHandler Callbacks<br>
+                                          ▼<br>
+    +-----------------------------------------------------------------------------------+<br>
+    |                 OPERATING SYSTEM KERNEL & HARDWARE SUBSYSTEMS                     |<br>
+    |    Linux: inotify / VFS / ext4 / Inodes        Windows: IOCP / ReadDirW / NTFS    |<br>
+    +-----------------------------------------------------------------------------------+
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}SafeFS - Intelligent File System Monitoring & Recovery{% endblock %}</title>
+  
+  <!-- Modern Fonts & Chart.js -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <!-- SafeFS Theme Stylesheet -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+
+<div class="app-container">
+  <!-- Left Navigation Sidebar -->
+  <aside class="app-sidebar">
+    <div class="brand-section">
+      <div class="brand-logo">FS</div>
+      <div>
+        <div class="brand-title">Safe<span>FS</span></div>
+        <div class="brand-sub">OS Kernel & Integrity</div>
+      </div>
+    </div>
+
+    <ul class="nav-menu">
+      <li class="nav-section-title">Operations</li>
+      <li class="nav-item">
+        <a href="{{ url_for('dashboard_page') }}" class="nav-link {% if active_page == 'dashboard' %}active{% endif %}">
+          <span class="nav-icon">📊</span> Dashboard
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="{{ url_for('explorer_page') }}" class="nav-link {% if active_page == 'explorer' %}active{% endif %}">
+          <span class="nav-icon">📁</span> File Explorer
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="{{ url_for('monitoring_page') }}" class="nav-link {% if active_page == 'monitoring' %}active{% endif %}">
+          <span class="nav-icon">📡</span> Live Monitoring
+        </a>
+      </li>
+
+      <li class="nav-section-title">Integrity & Recovery</li>
+      <li class="nav-item">
+        <a href="{{ url_for('versions_page') }}" class="nav-link {% if active_page == 'versions' %}active{% endif %}">
+          <span class="nav-icon">🕒</span> Version History
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="{{ url_for('recovery_page') }}" class="nav-link {% if active_page == 'recovery' %}active{% endif %}">
+          <span class="nav-icon">🔄</span> Recovery Center
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="{{ url_for('threats_page') }}" class="nav-link {% if active_page == 'threats' %}active{% endif %}">
+          <span class="nav-icon">🛡️</span> Threat Detection
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="{{ url_for('logs_page') }}" class="nav-link {% if active_page == 'logs' %}active{% endif %}">
+          <span class="nav-icon">📜</span> Activity Logs
+        </a>
+      </li>
+
+      <li class="nav-section-title">System & Academic</li>
+      <li class="nav-item">
+        <a href="{{ url_for('system_page') }}" class="nav-link {% if active_page == 'system' %}active{% endif %}">
+          <span class="nav-icon">⚙️</span> System Telemetry
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="{{ url_for('os_concepts_page') }}" class="nav-link {% if active_page == 'os_concepts' %}active{% endif %}">
+          <span class="nav-icon">🎓</span> OS Concepts
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="{{ url_for('settings_page') }}" class="nav-link {% if active_page == 'settings' %}active{% endif %}">
+          <span class="nav-icon">🔧</span> Settings
+        </a>
+      </li>
+    </ul>
+
+    <div class="sidebar-footer">
+      <div class="system-status-indicator">
+        <span class="pulse-dot" id="global-pulse-dot"></span>
+        <span id="global-monitor-status-text">Active Monitoring</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Content Shell -->
+  <div class="main-wrapper">
+    <!-- Topbar -->
+    <header class="app-topbar">
+      <div class="page-headline">
+        <h1 class="page-title">{% block page_title %}SafeFS Dashboard{% endblock %}</h1>
+        <span class="page-badge">V2.4 Academic OS Edition</span>
+      </div>
+
+      <div class="topbar-actions">
+        <button class="btn btn-outline btn-sm" onclick="openModal('add-folder-modal')">
+          <span>➕</span> Add Monitored Folder
+        </button>
+        {% block topbar_actions %}{% endblock %}
+      </div>
+    </header>
+
+    <!-- Page Body -->
+    <main class="page-body">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+
+<!-- Global Add Folder Modal -->
+<div class="modal-overlay" id="add-folder-modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 class="modal-title">📁 Register Directory for SafeFS Monitoring</h3>
+      <button class="modal-close" onclick="closeModal('add-folder-modal')">&times;</button>
+    </div>
+    <form onsubmit="handleAddMonitoredFolder(event)">
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="modal-folder-path">Full Folder Absolute Path:</label>
+          <input type="text" id="modal-folder-path" class="form-control" placeholder="e.g. C:\Users\Username\Documents\MyProject or /home/user/workspace" required>
+          <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">
+            SafeFS will attach real-time OS event listeners (Watchdog) and calculate initial SHA-256 baselines.
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="modal-folder-label">Friendly Label (Optional):</label>
+          <input type="text" id="modal-folder-label" class="form-control" placeholder="e.g. Critical Research Data">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" onclick="closeModal('add-folder-modal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Start Monitoring Folder</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Global Toast Notification Container -->
+<div id="toast-container"></div>
+
+<!-- Core Scripts -->
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+{% block extra_scripts %}{% endblock %}
+</body>
+</html>

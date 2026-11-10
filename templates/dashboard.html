@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block page_title %}Security & File System Dashboard{% endblock %}
+
+{% block content %}
+<!-- Quick Stat Counters -->
+<div class="grid-stats">
+  <div class="cyber-card stat-card accent-cyan">
+    <div class="stat-card-header">
+      <span>Total Tracked Files</span>
+      <div class="stat-card-icon">📄</div>
+    </div>
+    <div class="stat-card-value" id="stat-total-files">0</div>
+    <div class="stat-card-sub">Active Inodes Indexed</div>
+  </div>
+
+  <div class="cyber-card stat-card accent-blue">
+    <div class="stat-card-header">
+      <span>Watched Folders</span>
+      <div class="stat-card-icon">📁</div>
+    </div>
+    <div class="stat-card-value" id="stat-active-folders">0</div>
+    <div class="stat-card-sub">Active Directory Trees</div>
+  </div>
+
+  <div class="cyber-card stat-card accent-amber">
+    <div class="stat-card-header">
+      <span>Modified Files</span>
+      <div class="stat-card-icon">✏️</div>
+    </div>
+    <div class="stat-card-value" id="stat-modified-files">0</div>
+    <div class="stat-card-sub">Content Altered</div>
+  </div>
+
+  <div class="cyber-card stat-card accent-rose">
+    <div class="stat-card-header">
+      <span>Deleted Files</span>
+      <div class="stat-card-icon">🗑️</div>
+    </div>
+    <div class="stat-card-value" id="stat-deleted-files">0</div>
+    <div class="stat-card-sub">Removed from Disk</div>
+  </div>
+
+  <div class="cyber-card stat-card accent-rose">
+    <div class="stat-card-header">
+      <span>Active Threats</span>
+      <div class="stat-card-icon">🛡️</div>
+    </div>
+    <div class="stat-card-value" id="stat-active-threats">0</div>
+    <div class="stat-card-sub">Heuristic Alerts Triggered</div>
+  </div>
+
+  <div class="cyber-card stat-card accent-emerald">
+    <div class="stat-card-header">
+      <span>Backup Versions</span>
+      <div class="stat-card-icon">💾</div>
+    </div>
+    <div class="stat-card-value" id="stat-total-versions">0</div>
+    <div class="stat-card-sub">Immutable Snapshots</div>
+  </div>
+</div>
+
+<!-- Charts Section -->
+<div class="grid-cols-2">
+  <div class="cyber-card">
+    <div class="card-header">
+      <div class="card-title">📊 File System Event Distribution</div>
+      <span class="badge badge-info">OS Event Stream</span>
+    </div>
+    <div style="height: 240px; position: relative;">
+      <canvas id="eventDistributionChart"></canvas>
+    </div>
+  </div>
+
+  <div class="cyber-card">
+    <div class="card-header">
+      <div class="card-title">⚠️ Threat Severity Matrix</div>
+      <span class="badge badge-danger">HIDS Heuristics</span>
+    </div>
+    <div style="height: 240px; position: relative;">
+      <canvas id="threatSeverityChart"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- Recent File Activities -->
+<div class="cyber-card">
+  <div class="card-header">
+    <div class="card-title">🕒 Real-Time File System Activity Log</div>
+    <div style="display:flex; gap:8px;">
+      <a href="{{ url_for('monitoring_page') }}" class="btn btn-outline btn-sm">View Live Stream 📡</a>
+      <a href="{{ url_for('logs_page') }}" class="btn btn-outline btn-sm">Full Audit Trail 📜</a>
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="cyber-table">
+      <thead>
+        <tr>
+          <th>Event</th>
+          <th>Filename</th>
+          <th>Path</th>
+          <th>New SHA-256</th>
+          <th>Timestamp</th>
+        </tr>
+      </thead>
+      <tbody id="recent-activities-body">
+        <tr>
+          <td colspan="5" style="text-align:center; padding: 24px; color: var(--text-muted);">
+            Connecting to SafeFS kernel event monitor...
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

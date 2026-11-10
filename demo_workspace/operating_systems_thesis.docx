@@ -1,0 +1,4 @@
+SafeFS Thesis Chapter 1: Introduction to Virtual File Systems and Inode architecture.
+Original Author: SafeFS Engineering Team.
+Baseline Status: Clean.
+[Updated at 19:53:06]: Added Chapter 2 - Concurrency & Lock-Free Data Structures.

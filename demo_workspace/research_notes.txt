@@ -1,0 +1,3 @@
+Notes on inotify vs ReadDirectoryChangesW:
+- inotify uses non-blocking kernel event descriptors.
+- Win32 uses completion routines and asynchronous IOCP.

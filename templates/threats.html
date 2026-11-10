@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+
+{% block page_title %}Intelligent Threat Detection Console{% endblock %}
+
+{% block content %}
+<!-- Engine Description Card -->
+<div class="cyber-card" style="margin-bottom: 24px; border-left: 4px solid var(--accent-rose);">
+  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
+    <div>
+      <div style="font-size:15px; font-weight:700; color:var(--text-primary); margin-bottom:4px;">
+        Deterministic Rule-Based Host Intrusion Detection Engine (HIDS)
+      </div>
+      <div style="font-size:12.5px; color:var(--text-secondary); line-height:1.6;">
+        Analyzes real-time temporal event bursts and file extension mutations against deterministic OS threat rules.
+        Identifies high-frequency crypto-ransomware behaviors, mass data wipers, and malicious masquerading.
+      </div>
+    </div>
+    
+    <div style="display:flex; gap:8px;">
+      <button class="btn btn-outline btn-sm threat-filter active" onclick="loadThreats('')">All Alerts</button>
+      <button class="btn btn-outline btn-sm threat-filter" onclick="loadThreats('ACTIVE')">Active</button>
+      <button class="btn btn-outline btn-sm threat-filter" onclick="loadThreats('RESOLVED')">Resolved</button>
+    </div>
+  </div>
+</div>
+
+<!-- Alerts Container -->
+<div id="threats-list-container" style="display:flex; flex-direction:column; gap:16px;">
+  <div class="cyber-card" style="text-align:center; padding:40px; color:var(--text-muted);">
+    Loading security threat alerts...
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let currentStatusFilter = '';
+
+async function loadThreats(status = '') {
+  currentStatusFilter = status;
+  document.querySelectorAll('.threat-filter').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('onclick').includes(`'${status}'`));
+  });
+
+  try {
+    const res = await fetch(`/api/threats${status ? '?status=' + status : ''}`);
+    const alerts = await res.json();
+    renderThreats(alerts);
+  } catch (err) {
+    console.error('Error loading threats:', err);
+  }
+}
+
+function renderThreats(alerts) {
+  const container = document.getElementById('threats-list-container');
+  if (!container) return;
+
+  if (alerts.length === 0) {
+    container.innerHTML = `
+      <div class="cyber-card" style="text-align:center; padding: 48px;">
+        <div style="font-size: 36px; margin-bottom: 12px;">✅</div>
+        <div style="font-size: 16px; font-weight: 700; color: var(--accent-emerald);">No Active Threat Alerts</div>
+        <div style="color: var(--text-muted); font-size: 12.5px; margin-top: 6px;">
+          All monitored directory trees are operating normally within baseline thresholds.
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = alerts.map(a => {
+    let severityClass = 'badge-secondary';
+    let borderAccent = 'var(--border-subtle)';
+    if (a.severity === 'CRITICAL') {
+      severityClass = 'badge-danger';
+      borderAccent = 'var(--accent-rose)';
+    } else if (a.severity === 'HIGH') {
+      severityClass = 'badge-danger';
+      borderAccent = '#ff7a00';
+    } else if (a.severity === 'MEDIUM') {
+      severityClass = 'badge-warning';
+      borderAccent = 'var(--accent-amber)';
+    } else if (a.severity === 'LOW') {
+      severityClass = 'badge-info';
+      borderAccent = 'var(--accent-blue)';
+    }
+
+    const affectedList = (a.affected_files || []).map(f => `<li style="font-family:var(--font-mono); font-size:11.5px; color:var(--text-muted);">${escapeHtml(f)}</li>`).join('');
+
+    return `
+      <div class="cyber-card" style="border-left: 4px solid ${borderAccent};">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+          <div>
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+              <span class="badge ${severityClass}">${a.severity}</span>
+              <span class="badge badge-secondary">${a.rule_name}</span>
+              <span style="font-size:12px; color:var(--text-muted);">${a.created_at}</span>
+            </div>
+            <h3 style="font-size:16px; font-weight:700; color:var(--text-primary);">${escapeHtml(a.title)}</h3>
+          </div>
+
+          <div style="display:flex; gap:8px;">
+            ${a.status === 'ACTIVE' ? `
+              <button class="btn btn-success btn-sm" onclick="resolveThreat(${a.id})">✓ Mark Resolved</button>
+              <button class="btn btn-outline btn-sm" onclick="dismissThreat(${a.id})">Dismiss</button>
+            ` : `
+              <span class="badge badge-secondary">${a.status}</span>
+            `}
+          </div>
+        </div>
+
+        <div style="color:var(--text-secondary); font-size:13px; line-height:1.6; margin-bottom:14px;">
+          ${escapeHtml(a.description)}
+        </div>
+
+        ${a.affected_files && a.affected_files.length > 0 ? `
+          <div style="background:var(--bg-tertiary); border:1px solid var(--border-subtle); border-radius:8px; padding:12px;">
+            <div style="font-size:11.5px; font-weight:700; text-transform:uppercase; color:var(--text-secondary); margin-bottom:6px;">
+              Sample Affected File System Paths:
+            </div>
+            <ul style="padding-left:18px; margin:0;">
+              ${affectedList}
+            </ul>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+async function resolveThreat(alertId) {
+  try {
+    const res = await fetch(`/api/threats/${alertId}/resolve`, { method: 'POST' });
+    const data = await res.json();
+    if (data.success) {
+      showToast(data.message, 'success');
+      loadThreats(currentStatusFilter);
+    }
+  } catch (err) {
+    showToast('Failed to resolve threat', 'error');
+  }
+}
+
+async function dismissThreat(alertId) {
+  try {
+    const res = await fetch(`/api/threats/${alertId}/dismiss`, { method: 'POST' });
+    const data = await res.json();
+    if (data.success) {
+      showToast(data.message, 'info');
+      loadThreats(currentStatusFilter);
+    }
+  } catch (err) {
+    showToast('Failed to dismiss threat', 'error');
+  }
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadThreats('');
+});
+</script>
+{% endblock %}

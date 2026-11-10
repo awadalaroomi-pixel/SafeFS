@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+
+{% block page_title %}File Version Control & Snapshots{% endblock %}
+
+{% block content %}
+<div class="cyber-card" style="margin-bottom: 20px;">
+  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px;">
+    <div>
+      <div style="font-weight:700; font-size:14px; margin-bottom:4px;">SafeFS Immutable Snapshot Store</div>
+      <div style="color:var(--text-muted); font-size:12px;">
+        Emulates Copy-on-Write (CoW) and log-structured file system snapshots. Backups are stored in isolated, non-executable storage.
+      </div>
+    </div>
+
+    <div style="width: 280px;">
+      <input type="text" id="version-search-input" class="form-control" placeholder="Search filename or path..." oninput="loadAllVersions()">
+    </div>
+  </div>
+</div>
+
+<div class="cyber-card">
+  <div class="card-header">
+    <div class="card-title">💾 All Stored File Versions</div>
+    <span class="badge badge-info" id="version-count-badge">Snapshots</span>
+  </div>
+
+  <div class="table-responsive">
+    <table class="cyber-table">
+      <thead>
+        <tr>
+          <th>Version</th>
+          <th>File Target</th>
+          <th>Folder</th>
+          <th>Change Type</th>
+          <th>Size</th>
+          <th>SHA-256 Hash</th>
+          <th>Snapshot Time</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="all-versions-tbody">
+        <tr>
+          <td colspan="8" style="text-align:center; padding:32px; color:var(--text-muted);">
+            Loading backup versions...
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Modal: Version Diff Viewer -->
+<div class="modal-overlay" id="version-diff-modal">
+  <div class="modal-content" style="max-width: 850px;">
+    <div class="modal-header">
+      <h3 class="modal-title" id="version-diff-title">🔍 Version Differential Analysis</h3>
+      <button class="modal-close" onclick="closeModal('version-diff-modal')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="version-diff-content" class="diff-container"></div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-outline" onclick="closeModal('version-diff-modal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: File Preview -->
+<div class="modal-overlay" id="version-preview-modal">
+  <div class="modal-content" style="max-width: 750px;">
+    <div class="modal-header">
+      <h3 class="modal-title" id="version-preview-title">👁️ Version Content Preview</h3>
+      <button class="modal-close" onclick="closeModal('version-preview-modal')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <pre id="version-preview-content" class="diff-container" style="max-height: 450px;"></pre>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-outline" onclick="closeModal('version-preview-modal')">Close</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+async function loadAllVersions() {
+  const searchInput = document.getElementById('version-search-input');
+  const search = searchInput ? searchInput.value.trim() : '';
+
+  try {
+    const res = await fetch(`/api/all-versions?search=${encodeURIComponent(search)}`);
+    const versions = await res.json();
+    renderAllVersions(versions);
+  } catch (err) {
+    console.error('Error loading versions:', err);
+  }
+}
+
+function renderAllVersions(versions) {
+  const tbody = document.getElementById('all-versions-tbody');
+  const badge = document.getElementById('version-count-badge');
+  if (badge) badge.textContent = `${versions.length} Snapshots`;
+
+  if (!tbody) return;
+
+  if (versions.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:32px; color:var(--text-muted);">No backup versions found. Modify files in monitored folders to generate versions.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = versions.map(v => {
+    let typeBadge = 'badge-secondary';
+    if (v.change_type === 'INITIAL') typeBadge = 'badge-info';
+    if (v.change_type === 'MODIFIED') typeBadge = 'badge-success';
+    if (v.change_type === 'PRE_RESTORE') typeBadge = 'badge-warning';
+
+    return `
+      <tr>
+        <td style="font-weight:700;">#${v.version_number}</td>
+        <td style="font-weight:600; color:var(--text-primary);">${escapeHtml(v.filename)}</td>
+        <td><span class="badge badge-secondary">${escapeHtml(v.folder_label || 'Default')}</span></td>
+        <td><span class="badge ${typeBadge}">${v.change_type}</span></td>
+        <td>${formatBytes(v.size_bytes)}</td>
+        <td class="font-mono" style="font-size:11px;">${v.sha256.substring(0, 10)}...</td>
+        <td style="font-size:12px; color:var(--text-secondary);">${v.created_at}</td>
+        <td>
+          <div style="display:flex; gap:4px;">
+            <button class="btn btn-outline btn-sm" onclick="previewVersion(${v.id}, '${escapeHtml(v.filename)}', ${v.version_number})" title="Preview Content">👁️</button>
+            <button class="btn btn-outline btn-sm" onclick="diffVersionWithLive(${v.id})" title="Diff vs Live">Diff</button>
+            <a href="/api/versions/download/${v.id}" class="btn btn-outline btn-sm" title="Download">⬇</a>
+            <button class="btn btn-primary btn-sm" onclick="restoreFromVersionsPage(${v.id}, ${v.version_number})" title="Restore with Safety Backup">Restore</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteVersionRecord(${v.id})" title="Delete Backup">🗑️</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function previewVersion(versionId, filename, versionNumber) {
+  try {
+    const res = await fetch(`/api/files/preview?version_id=${versionId}`);
+    const data = await res.json();
+    document.getElementById('version-preview-title').textContent = `Preview: ${filename} (v#${versionNumber})`;
+    document.getElementById('version-preview-content').textContent = data.content || '[Empty or Binary File]';
+    openModal('version-preview-modal');
+  } catch (err) {
+    showToast('Failed to preview version', 'error');
+  }
+}
+
+async function diffVersionWithLive(versionId) {
+  try {
+    const res = await fetch(`/api/versions/diff?v1_id=${versionId}&current_file=true`);
+    const data = await res.json();
+    document.getElementById('version-diff-title').textContent = `Unified Diff: ${data.v1_label} vs Live File`;
+    
+    const lines = (data.diff || '').split('\n');
+    document.getElementById('version-diff-content').innerHTML = lines.map(line => {
+      let cls = '';
+      if (line.startsWith('+') && !line.startsWith('+++')) cls = 'diff-add';
+      else if (line.startsWith('-') && !line.startsWith('---')) cls = 'diff-del';
+      else if (line.startsWith('@@') || line.startsWith('---') || line.startsWith('+++')) cls = 'diff-hdr';
+      return `<span class="${cls}">${escapeHtml(line)}</span>`;
+    }).join('\n');
+
+    openModal('version-diff-modal');
+  } catch (err) {
+    showToast('Failed to compute diff', 'error');
+  }
+}
+
+async function restoreFromVersionsPage(versionId, versionNumber) {
+  if (!confirm(`Restore Version #${versionNumber}?\n\nOperating System Safety Guarantee: SafeFS will take a snapshot backup of the current target file before overwriting.`)) {
+    return;
+  }
+  try {
+    showToast('Restoring file with pre-restore safety snapshot...', 'info');
+    const res = await fetch('/api/files/restore', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ version_id: versionId, reason: 'Restored from Version History page' })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(data.message, 'success');
+      loadAllVersions();
+    } else {
+      showToast(data.error || 'Restoration failed', 'error');
+    }
+  } catch (err) {
+    showToast('Restoration request failed', 'error');
+  }
+}
+
+async function deleteVersionRecord(versionId) {
+  if (!confirm('Permanently delete this backup snapshot from disk storage?')) return;
+  try {
+    const res = await fetch(`/api/versions/${versionId}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (data.success) {
+      showToast(data.message, 'success');
+      loadAllVersions();
+    } else {
+      showToast(data.error || 'Failed to delete version', 'error');
+    }
+  } catch (err) {
+    showToast('Delete request failed', 'error');
+  }
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadAllVersions();
+});
+</script>
+{% endblock %}

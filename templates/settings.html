@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+
+{% block page_title %}Application Settings & Configuration{% endblock %}
+
+{% block content %}
+<div class="grid-cols-2">
+  <!-- Monitored Folders Management -->
+  <div class="cyber-card">
+    <div class="card-header">
+      <div class="card-title">📁 Monitored Directory Repositories</div>
+      <button class="btn btn-primary btn-sm" onclick="openModal('add-folder-modal')">➕ Add Folder</button>
+    </div>
+
+    <p style="font-size:12px; color:var(--text-muted); margin-bottom:14px;">
+      SafeFS operates exclusively on directories explicitly added by the user. Root drives and system directories are protected.
+    </p>
+
+    <div class="table-responsive">
+      <table class="cyber-table">
+        <thead>
+          <tr>
+            <th>Label</th>
+            <th>Path</th>
+            <th>Files</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="settings-folders-tbody">
+          {% for folder in folders %}
+          <tr>
+            <td style="font-weight:600; color:var(--text-primary);">{{ folder.label }}</td>
+            <td style="font-size:11.5px; color:var(--text-muted);">{{ folder.path }}</td>
+            <td><span class="badge badge-info">{{ folder.file_count }}</span></td>
+            <td>
+              <div style="display:flex; gap:6px;">
+                <button class="btn btn-outline btn-sm" onclick="triggerFolderScan({{ folder.id }})" title="Re-scan and Hash Files">🔄 Scan</button>
+                <button class="btn btn-danger btn-sm" onclick="removeFolder({{ folder.id }})" title="Stop Monitoring">Remove</button>
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="4" style="text-align:center; padding:24px; color:var(--text-muted);">
+              No monitored folders configured. Click "Add Folder" to begin.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Heuristic Threshold Configuration -->
+  <div class="cyber-card">
+    <div class="card-header">
+      <div class="card-title">⚙️ Threat Detection & Versioning Rules</div>
+      <span class="badge badge-info">OS Heuristics</span>
+    </div>
+
+    <form onsubmit="handleSaveSettings(event)">
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:14px;">
+        <div class="form-group">
+          <label class="form-label">Burst Mod Count:</label>
+          <input type="number" id="setting-burst-mod-count" class="form-control" value="{{ settings.get('burst_modification_count', '5') }}" min="2" max="100" required>
+          <div style="font-size:10.5px; color:var(--text-muted); margin-top:2px;">Files altered before alert</div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Burst Mod Window (s):</label>
+          <input type="number" id="setting-burst-mod-window" class="form-control" value="{{ settings.get('burst_window_seconds', '5') }}" step="0.5" min="1" max="60" required>
+          <div style="font-size:10.5px; color:var(--text-muted); margin-top:2px;">Sliding window in seconds</div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Burst Deletion Count:</label>
+          <input type="number" id="setting-burst-del-count" class="form-control" value="{{ settings.get('burst_deletion_count', '3') }}" min="2" max="100" required>
+          <div style="font-size:10.5px; color:var(--text-muted); margin-top:2px;">Files purged before alert</div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Burst Del Window (s):</label>
+          <input type="number" id="setting-burst-del-window" class="form-control" value="{{ settings.get('burst_deletion_window', '5') }}" step="0.5" min="1" max="60" required>
+          <div style="font-size:10.5px; color:var(--text-muted); margin-top:2px;">Sliding window in seconds</div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Mass Rename Count:</label>
+          <input type="number" id="setting-mass-rename-count" class="form-control" value="{{ settings.get('mass_rename_count', '4') }}" min="2" max="100" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Max Versions Per File:</label>
+          <input type="number" id="setting-max-versions" class="form-control" value="{{ settings.get('max_versions_per_file', '20') }}" min="3" max="100" required>
+          <div style="font-size:10.5px; color:var(--text-muted); margin-top:2px;">Oldest versions auto-pruned</div>
+        </div>
+      </div>
+
+      <div style="margin-top: 14px; display:flex; justify-content:flex-end;">
+        <button type="submit" class="btn btn-primary">Save Configuration</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+async function handleSaveSettings(event) {
+  event.preventDefault();
+
+  const payload = {
+    burst_modification_count: document.getElementById('setting-burst-mod-count').value,
+    burst_window_seconds: document.getElementById('setting-burst-mod-window').value,
+    burst_deletion_count: document.getElementById('setting-burst-del-count').value,
+    burst_deletion_window: document.getElementById('setting-burst-del-window').value,
+    mass_rename_count: document.getElementById('setting-mass-rename-count').value,
+    max_versions_per_file: document.getElementById('setting-max-versions').value
+  };
+
+  try {
+    const res = await fetch('/api/settings/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(data.message, 'success');
+    } else {
+      showToast('Failed to update settings', 'error');
+    }
+  } catch (err) {
+    showToast('Network error while saving settings', 'error');
+  }
+}
+
+async function triggerFolderScan(folderId) {
+  try {
+    showToast('Indexing directory and calculating SHA-256 baselines...', 'info');
+    const res = await fetch('/api/folders/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ folder_id: folderId })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(`Scan complete: ${data.indexed_count} files indexed`, 'success');
+      setTimeout(() => location.reload(), 800);
+    } else {
+      showToast(data.error || 'Scan failed', 'error');
+    }
+  } catch (err) {
+    showToast('Folder scan request failed', 'error');
+  }
+}
+
+async function removeFolder(folderId) {
+  if (!confirm('Stop monitoring this directory in SafeFS?\n\n(Existing backup snapshots and logs will be preserved).')) return;
+  try {
+    const res = await fetch('/api/folders/remove', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ folder_id: folderId })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(data.message, 'info');
+      setTimeout(() => location.reload(), 700);
+    }
+  } catch (err) {
+    showToast('Failed to remove folder', 'error');
+  }
+}
+</script>
+{% endblock %}
